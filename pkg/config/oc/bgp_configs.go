@@ -2622,6 +2622,9 @@ type TransportConfig struct {
 	// original -> gobgp:bind-interface
 	// Interface name for binding.
 	BindInterface string `mapstructure:"bind-interface" json:"bind-interface,omitempty"`
+	// original -> gobgp:netns
+	// Network namespace to use.
+	Netns string `mapstructure:"netns" json:"netns,omitempty"`
 }
 
 func (lhs *TransportConfig) Equal(rhs *TransportConfig) bool {
@@ -2650,6 +2653,9 @@ func (lhs *TransportConfig) Equal(rhs *TransportConfig) bool {
 		return false
 	}
 	if lhs.BindInterface != rhs.BindInterface {
+		return false
+	}
+	if lhs.Netns != rhs.Netns {
 		return false
 	}
 	return true
@@ -4863,6 +4869,8 @@ type GlobalState struct {
 	Port int32 `mapstructure:"port" json:"port,omitempty"`
 	// original -> gobgp:local-address
 	LocalAddressList []string `mapstructure:"local-address-list" json:"local-address-list,omitempty"`
+	// original -> gobgp:netns
+	Netns string `mapstructure:"netns" json:"netns,omitempty"`
 }
 
 // struct for container bgp:config.
@@ -4882,6 +4890,8 @@ type GlobalConfig struct {
 	Port int32 `mapstructure:"port" json:"port,omitempty"`
 	// original -> gobgp:local-address
 	LocalAddressList []string `mapstructure:"local-address-list" json:"local-address-list,omitempty"`
+	// original -> gobgp:netns
+	Netns string `mapstructure:"netns" json:"netns,omitempty"`
 }
 
 func (lhs *GlobalConfig) Equal(rhs *GlobalConfig) bool {
@@ -4904,6 +4914,9 @@ func (lhs *GlobalConfig) Equal(rhs *GlobalConfig) bool {
 		if l != rhs.LocalAddressList[idx] {
 			return false
 		}
+	}
+	if lhs.Netns != rhs.Netns {
+		return false
 	}
 	return true
 }
