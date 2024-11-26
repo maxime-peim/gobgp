@@ -207,7 +207,12 @@ func eorToPathAPI(path *table.Path) *api.Path {
 	return p
 }
 
-func toPathApi(path *table.Path, v *table.Validation, onlyBinary, nlriBinary, attributeBinary bool) *api.Path {
+func ToPathApi(pathAny any, vAny any, onlyBinary, nlriBinary, attributeBinary bool) *api.Path {
+	path := pathAny.(*table.Path)
+	v, ok := vAny.(*table.Validation)
+	if !ok {
+		v = nil
+	}
 	var (
 		anyNlri   *apb.Any
 		anyPattrs []*apb.Any
@@ -333,7 +338,7 @@ func newRoutingPolicyFromApiStruct(arg *api.SetPoliciesRequest) (*oc.RoutingPoli
 	}, nil
 }
 
-func api2Path(resource api.TableType, path *api.Path, isWithdraw bool) (*table.Path, error) {
+func Api2Path(resource api.TableType, path *api.Path, isWithdraw bool) (*table.Path, error) {
 	var pi *table.PeerInfo
 	var nlri bgp.AddrPrefixInterface
 	var nexthop string
@@ -443,7 +448,7 @@ func (s *server) AddPathStream(stream api.GobgpApi_AddPathStreamServer) error {
 		}
 		pathList := make([]*table.Path, 0, len(arg.Paths))
 		for _, apiPath := range arg.Paths {
-			if path, err := api2Path(arg.TableType, apiPath, apiPath.IsWithdraw); err != nil {
+			if path, err := Api2Path(arg.TableType, apiPath, apiPath.IsWithdraw); err != nil {
 				return err
 			} else {
 				pathList = append(pathList, path)
