@@ -2178,66 +2178,74 @@ func getMacMobilityExtendedCommunity(etag uint32, mac net.HardwareAddr, evpnPath
 	return nil
 }
 
+func (s *BgpServer) FixupOnePath(vrfId string, pathAny any) error {
+	path := pathAny.(*table.Path)
+	if !path.IsWithdraw {
+		if _, err := path.GetOrigin(); err != nil {
+			return err
+		}
+	}
+
+	if vrfId != "" {
+		vrf := s.globalRib.Vrfs[vrfId]
+		if vrf == nil {
+			return fmt.Errorf("vrf %s not found", vrfId)
+		}
+		if err := vrf.ToGlobalPath(path); err != nil {
+			return err
+		}
+	}
+
+	// Address Family specific Handling
+	switch nlri := path.GetNlri().(type) {
+	case *bgp.EVPNNLRI:
+		switch r := nlri.RouteTypeData.(type) {
+		case *bgp.EVPNMacIPAdvertisementRoute:
+			// MAC Mobility Extended Community
+			var paths []*table.Path
+			for _, ec := range path.GetRouteTargets() {
+				paths = append(paths, s.globalRib.GetPathListWithMac(table.GLOBAL_RIB_NAME, 0, []bgp.RouteFamily{bgp.RF_EVPN}, ec, r.MacAddress)...)
+			}
+			if m := getMacMobilityExtendedCommunity(r.ETag, r.MacAddress, paths); m != nil {
+				pm := getMacMobilityExtendedCommunity(r.ETag, r.MacAddress, []*table.Path{path})
+				if pm == nil {
+					path.SetExtCommunities([]bgp.ExtendedCommunityInterface{m}, false)
+				} else if pm != nil && pm.Sequence < m.Sequence {
+					return fmt.Errorf("invalid MAC mobility sequence number")
+				}
+			}
+		case *bgp.EVPNEthernetSegmentRoute:
+			// RFC7432: BGP MPLS-Based Ethernet VPN
+			// 7.6. ES-Import Route Target
+			// The value is derived automatically for the ESI Types 1, 2,
+			// and 3, by encoding the high-order 6-octet portion of the 9-octet ESI
+			// Value, which corresponds to a MAC address, in the ES-Import Route
+			// Target.
+			// Note: If the given path already has the ES-Import Route Target,
+			// skips deriving a new one.
+			found := false
+			for _, extComm := range path.GetExtCommunities() {
+				if _, found = extComm.(*bgp.ESImportRouteTarget); found {
+					break
+				}
+			}
+			if !found {
+				switch r.ESI.Type {
+				case bgp.ESI_LACP, bgp.ESI_MSTP, bgp.ESI_MAC:
+					mac := net.HardwareAddr(r.ESI.Value[0:6])
+					rt := &bgp.ESImportRouteTarget{ESImport: mac}
+					path.SetExtCommunities([]bgp.ExtendedCommunityInterface{rt}, false)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (s *BgpServer) fixupApiPath(vrfId string, pathList []*table.Path) error {
 	for _, path := range pathList {
-		if !path.IsWithdraw {
-			if _, err := path.GetOrigin(); err != nil {
-				return err
-			}
-		}
-
-		if vrfId != "" {
-			vrf := s.globalRib.Vrfs[vrfId]
-			if vrf == nil {
-				return fmt.Errorf("vrf %s not found", vrfId)
-			}
-			if err := vrf.ToGlobalPath(path); err != nil {
-				return err
-			}
-		}
-
-		// Address Family specific Handling
-		switch nlri := path.GetNlri().(type) {
-		case *bgp.EVPNNLRI:
-			switch r := nlri.RouteTypeData.(type) {
-			case *bgp.EVPNMacIPAdvertisementRoute:
-				// MAC Mobility Extended Community
-				var paths []*table.Path
-				for _, ec := range path.GetRouteTargets() {
-					paths = append(paths, s.globalRib.GetPathListWithMac(table.GLOBAL_RIB_NAME, 0, []bgp.RouteFamily{bgp.RF_EVPN}, ec, r.MacAddress)...)
-				}
-				if m := getMacMobilityExtendedCommunity(r.ETag, r.MacAddress, paths); m != nil {
-					pm := getMacMobilityExtendedCommunity(r.ETag, r.MacAddress, []*table.Path{path})
-					if pm == nil {
-						path.SetExtCommunities([]bgp.ExtendedCommunityInterface{m}, false)
-					} else if pm != nil && pm.Sequence < m.Sequence {
-						return fmt.Errorf("invalid MAC mobility sequence number")
-					}
-				}
-			case *bgp.EVPNEthernetSegmentRoute:
-				// RFC7432: BGP MPLS-Based Ethernet VPN
-				// 7.6. ES-Import Route Target
-				// The value is derived automatically for the ESI Types 1, 2,
-				// and 3, by encoding the high-order 6-octet portion of the 9-octet ESI
-				// Value, which corresponds to a MAC address, in the ES-Import Route
-				// Target.
-				// Note: If the given path already has the ES-Import Route Target,
-				// skips deriving a new one.
-				found := false
-				for _, extComm := range path.GetExtCommunities() {
-					if _, found = extComm.(*bgp.ESImportRouteTarget); found {
-						break
-					}
-				}
-				if !found {
-					switch r.ESI.Type {
-					case bgp.ESI_LACP, bgp.ESI_MSTP, bgp.ESI_MAC:
-						mac := net.HardwareAddr(r.ESI.Value[0:6])
-						rt := &bgp.ESImportRouteTarget{ESImport: mac}
-						path.SetExtCommunities([]bgp.ExtendedCommunityInterface{rt}, false)
-					}
-				}
-			}
+		if err := s.FixupOnePath(vrfId, path); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -2273,7 +2281,7 @@ func (s *BgpServer) AddPath(ctx context.Context, r *api.AddPathRequest) (*api.Ad
 			return err
 		}
 
-		path, err := api2Path(r.TableType, r.Path, false)
+		path, err := Api2Path(r.TableType, r.Path, false)
 		if err != nil {
 			return err
 		}
@@ -2298,7 +2306,7 @@ func (s *BgpServer) DeletePath(ctx context.Context, r *api.DeletePathRequest) er
 
 		pathList, err := func() ([]*table.Path, error) {
 			if r.Path != nil {
-				path, err := api2Path(r.TableType, r.Path, true)
+				path, err := Api2Path(r.TableType, r.Path, true)
 				return []*table.Path{path}, err
 			}
 			return []*table.Path{}, nil
@@ -2363,6 +2371,17 @@ func (s *BgpServer) updatePath(vrfId string, pathList []*table.Path) error {
 		return nil
 	}, true)
 	return err
+}
+
+func (s *BgpServer) AddPathStream(paths []any) error {
+	return s.mgmtOperation(func() error {
+		pathsList := make([]*table.Path, len(paths))
+		for i, p := range paths {
+			pathsList[i] = p.(*table.Path)
+		}
+		s.propagateUpdate(nil, pathsList)
+		return nil
+	}, true)
 }
 
 func (s *BgpServer) StartBgp(ctx context.Context, r *api.StartBgpRequest) error {
@@ -2833,7 +2852,7 @@ func (s *BgpServer) ListPath(ctx context.Context, r *api.ListPathRequest, fn fun
 			}
 			knownPathList := dst.GetAllKnownPathList()
 			for i, path := range knownPathList {
-				p := toPathApi(path, getValidation(v, path), r.EnableOnlyBinary, r.EnableNlriBinary, r.EnableAttributeBinary)
+				p := ToPathApi(path, getValidation(v, path), r.EnableOnlyBinary, r.EnableNlriBinary, r.EnableAttributeBinary)
 				if !table.SelectionOptions.DisableBestPathSelection {
 					if i == 0 {
 						switch r.TableType {
@@ -4275,7 +4294,7 @@ func (s *BgpServer) WatchEvent(ctx context.Context, r *api.WatchEventRequest, fn
 				case *watchEventUpdate:
 					paths := make([]*api.Path, 0, r.BatchSize)
 					for _, path := range msg.PathList {
-						paths = append(paths, toPathApi(path, nil, false, false, false))
+						paths = append(paths, ToPathApi(path, nil, false, false, false))
 						if r.BatchSize > 0 && len(paths) > int(r.BatchSize) {
 							simpleSend(paths)
 							paths = make([]*api.Path, 0, r.BatchSize)
@@ -4295,7 +4314,7 @@ func (s *BgpServer) WatchEvent(ctx context.Context, r *api.WatchEventRequest, fn
 
 					pl := make([]*api.Path, 0, r.BatchSize)
 					for _, path := range paths {
-						pl = append(pl, toPathApi(path, nil, false, false, false))
+						pl = append(pl, ToPathApi(path, nil, false, false, false))
 						if r.BatchSize > 0 && len(pl) > int(r.BatchSize) {
 							simpleSend(pl)
 							pl = make([]*api.Path, 0, r.BatchSize)
