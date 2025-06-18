@@ -5032,10 +5032,10 @@ func (lhs *Bgp) Equal(rhs *Bgp) bool {
 	{
 		lmap := make(map[string]*Neighbor)
 		for i, l := range lhs.Neighbors {
-			lmap[mapkey(i, string(l.Config.NeighborAddress))] = &lhs.Neighbors[i]
+			lmap[mapkey(i, l.Config.NeighborAddress)] = &lhs.Neighbors[i]
 		}
 		for i, r := range rhs.Neighbors {
-			if l, y := lmap[mapkey(i, string(r.Config.NeighborAddress))]; !y {
+			if l, y := lmap[mapkey(i, r.Config.NeighborAddress)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -5048,10 +5048,10 @@ func (lhs *Bgp) Equal(rhs *Bgp) bool {
 	{
 		lmap := make(map[string]*PeerGroup)
 		for i, l := range lhs.PeerGroups {
-			lmap[mapkey(i, string(l.Config.PeerGroupName))] = &lhs.PeerGroups[i]
+			lmap[mapkey(i, l.Config.PeerGroupName)] = &lhs.PeerGroups[i]
 		}
 		for i, r := range rhs.PeerGroups {
-			if l, y := lmap[mapkey(i, string(r.Config.PeerGroupName))]; !y {
+			if l, y := lmap[mapkey(i, r.Config.PeerGroupName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -5064,10 +5064,10 @@ func (lhs *Bgp) Equal(rhs *Bgp) bool {
 	{
 		lmap := make(map[string]*RpkiServer)
 		for i, l := range lhs.RpkiServers {
-			lmap[mapkey(i, string(l.Config.Address))] = &lhs.RpkiServers[i]
+			lmap[mapkey(i, l.Config.Address)] = &lhs.RpkiServers[i]
 		}
 		for i, r := range rhs.RpkiServers {
-			if l, y := lmap[mapkey(i, string(r.Config.Address))]; !y {
+			if l, y := lmap[mapkey(i, r.Config.Address)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -5080,10 +5080,10 @@ func (lhs *Bgp) Equal(rhs *Bgp) bool {
 	{
 		lmap := make(map[string]*BmpServer)
 		for i, l := range lhs.BmpServers {
-			lmap[mapkey(i, string(l.Config.Address))] = &lhs.BmpServers[i]
+			lmap[mapkey(i, l.Config.Address)] = &lhs.BmpServers[i]
 		}
 		for i, r := range rhs.BmpServers {
-			if l, y := lmap[mapkey(i, string(r.Config.Address))]; !y {
+			if l, y := lmap[mapkey(i, r.Config.Address)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -5096,10 +5096,10 @@ func (lhs *Bgp) Equal(rhs *Bgp) bool {
 	{
 		lmap := make(map[string]*Vrf)
 		for i, l := range lhs.Vrfs {
-			lmap[mapkey(i, string(l.Config.Name))] = &lhs.Vrfs[i]
+			lmap[mapkey(i, l.Config.Name)] = &lhs.Vrfs[i]
 		}
 		for i, r := range rhs.Vrfs {
-			if l, y := lmap[mapkey(i, string(r.Config.Name))]; !y {
+			if l, y := lmap[mapkey(i, r.Config.Name)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -5112,10 +5112,10 @@ func (lhs *Bgp) Equal(rhs *Bgp) bool {
 	{
 		lmap := make(map[string]*Mrt)
 		for i, l := range lhs.MrtDump {
-			lmap[mapkey(i, string(l.Config.FileName))] = &lhs.MrtDump[i]
+			lmap[mapkey(i, l.Config.FileName)] = &lhs.MrtDump[i]
 		}
 		for i, r := range rhs.MrtDump {
-			if l, y := lmap[mapkey(i, string(r.Config.FileName))]; !y {
+			if l, y := lmap[mapkey(i, r.Config.FileName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -5134,10 +5134,10 @@ func (lhs *Bgp) Equal(rhs *Bgp) bool {
 	{
 		lmap := make(map[string]*DynamicNeighbor)
 		for i, l := range lhs.DynamicNeighbors {
-			lmap[mapkey(i, string(l.Config.Prefix))] = &lhs.DynamicNeighbors[i]
+			lmap[mapkey(i, l.Config.Prefix)] = &lhs.DynamicNeighbors[i]
 		}
 		for i, r := range rhs.DynamicNeighbors {
-			if l, y := lmap[mapkey(i, string(r.Config.Prefix))]; !y {
+			if l, y := lmap[mapkey(i, r.Config.Prefix)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -5955,10 +5955,10 @@ func (lhs *PolicyDefinition) Equal(rhs *PolicyDefinition) bool {
 	{
 		lmap := make(map[string]*Statement)
 		for i, l := range lhs.Statements {
-			lmap[mapkey(i, string(l.Name))] = &lhs.Statements[i]
+			lmap[mapkey(i, l.Name)] = &lhs.Statements[i]
 		}
 		for i, r := range rhs.Statements {
-			if l, y := lmap[mapkey(i, string(r.Name))]; !y {
+			if l, y := lmap[mapkey(i, r.Name)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6111,10 +6111,10 @@ func (lhs *BgpDefinedSets) Equal(rhs *BgpDefinedSets) bool {
 	{
 		lmap := make(map[string]*CommunitySet)
 		for i, l := range lhs.CommunitySets {
-			lmap[mapkey(i, string(l.CommunitySetName))] = &lhs.CommunitySets[i]
+			lmap[mapkey(i, l.CommunitySetName)] = &lhs.CommunitySets[i]
 		}
 		for i, r := range rhs.CommunitySets {
-			if l, y := lmap[mapkey(i, string(r.CommunitySetName))]; !y {
+			if l, y := lmap[mapkey(i, r.CommunitySetName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6127,10 +6127,10 @@ func (lhs *BgpDefinedSets) Equal(rhs *BgpDefinedSets) bool {
 	{
 		lmap := make(map[string]*ExtCommunitySet)
 		for i, l := range lhs.ExtCommunitySets {
-			lmap[mapkey(i, string(l.ExtCommunitySetName))] = &lhs.ExtCommunitySets[i]
+			lmap[mapkey(i, l.ExtCommunitySetName)] = &lhs.ExtCommunitySets[i]
 		}
 		for i, r := range rhs.ExtCommunitySets {
-			if l, y := lmap[mapkey(i, string(r.ExtCommunitySetName))]; !y {
+			if l, y := lmap[mapkey(i, r.ExtCommunitySetName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6143,10 +6143,10 @@ func (lhs *BgpDefinedSets) Equal(rhs *BgpDefinedSets) bool {
 	{
 		lmap := make(map[string]*AsPathSet)
 		for i, l := range lhs.AsPathSets {
-			lmap[mapkey(i, string(l.AsPathSetName))] = &lhs.AsPathSets[i]
+			lmap[mapkey(i, l.AsPathSetName)] = &lhs.AsPathSets[i]
 		}
 		for i, r := range rhs.AsPathSets {
-			if l, y := lmap[mapkey(i, string(r.AsPathSetName))]; !y {
+			if l, y := lmap[mapkey(i, r.AsPathSetName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6159,10 +6159,10 @@ func (lhs *BgpDefinedSets) Equal(rhs *BgpDefinedSets) bool {
 	{
 		lmap := make(map[string]*LargeCommunitySet)
 		for i, l := range lhs.LargeCommunitySets {
-			lmap[mapkey(i, string(l.LargeCommunitySetName))] = &lhs.LargeCommunitySets[i]
+			lmap[mapkey(i, l.LargeCommunitySetName)] = &lhs.LargeCommunitySets[i]
 		}
 		for i, r := range rhs.LargeCommunitySets {
-			if l, y := lmap[mapkey(i, string(r.LargeCommunitySetName))]; !y {
+			if l, y := lmap[mapkey(i, r.LargeCommunitySetName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6322,10 +6322,10 @@ func (lhs *PrefixSet) Equal(rhs *PrefixSet) bool {
 	{
 		lmap := make(map[string]*Prefix)
 		for i, l := range lhs.PrefixList {
-			lmap[mapkey(i, string(l.IpPrefix+l.MasklengthRange))] = &lhs.PrefixList[i]
+			lmap[mapkey(i, l.IpPrefix+l.MasklengthRange)] = &lhs.PrefixList[i]
 		}
 		for i, r := range rhs.PrefixList {
-			if l, y := lmap[mapkey(i, string(r.IpPrefix+r.MasklengthRange))]; !y {
+			if l, y := lmap[mapkey(i, r.IpPrefix+r.MasklengthRange)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6363,10 +6363,10 @@ func (lhs *DefinedSets) Equal(rhs *DefinedSets) bool {
 	{
 		lmap := make(map[string]*PrefixSet)
 		for i, l := range lhs.PrefixSets {
-			lmap[mapkey(i, string(l.PrefixSetName))] = &lhs.PrefixSets[i]
+			lmap[mapkey(i, l.PrefixSetName)] = &lhs.PrefixSets[i]
 		}
 		for i, r := range rhs.PrefixSets {
-			if l, y := lmap[mapkey(i, string(r.PrefixSetName))]; !y {
+			if l, y := lmap[mapkey(i, r.PrefixSetName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6379,10 +6379,10 @@ func (lhs *DefinedSets) Equal(rhs *DefinedSets) bool {
 	{
 		lmap := make(map[string]*NeighborSet)
 		for i, l := range lhs.NeighborSets {
-			lmap[mapkey(i, string(l.NeighborSetName))] = &lhs.NeighborSets[i]
+			lmap[mapkey(i, l.NeighborSetName)] = &lhs.NeighborSets[i]
 		}
 		for i, r := range rhs.NeighborSets {
-			if l, y := lmap[mapkey(i, string(r.NeighborSetName))]; !y {
+			if l, y := lmap[mapkey(i, r.NeighborSetName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6395,10 +6395,10 @@ func (lhs *DefinedSets) Equal(rhs *DefinedSets) bool {
 	{
 		lmap := make(map[string]*TagSet)
 		for i, l := range lhs.TagSets {
-			lmap[mapkey(i, string(l.TagSetName))] = &lhs.TagSets[i]
+			lmap[mapkey(i, l.TagSetName)] = &lhs.TagSets[i]
 		}
 		for i, r := range rhs.TagSets {
-			if l, y := lmap[mapkey(i, string(r.TagSetName))]; !y {
+			if l, y := lmap[mapkey(i, r.TagSetName)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
@@ -6437,10 +6437,10 @@ func (lhs *RoutingPolicy) Equal(rhs *RoutingPolicy) bool {
 	{
 		lmap := make(map[string]*PolicyDefinition)
 		for i, l := range lhs.PolicyDefinitions {
-			lmap[mapkey(i, string(l.Name))] = &lhs.PolicyDefinitions[i]
+			lmap[mapkey(i, l.Name)] = &lhs.PolicyDefinitions[i]
 		}
 		for i, r := range rhs.PolicyDefinitions {
-			if l, y := lmap[mapkey(i, string(r.Name))]; !y {
+			if l, y := lmap[mapkey(i, r.Name)]; !y {
 				return false
 			} else if !r.Equal(l) {
 				return false
