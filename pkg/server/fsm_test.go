@@ -220,7 +220,7 @@ func TestFSMHandlerEstablish_HoldTimerExpired(t *testing.T) {
 	m := NewMockConnection(t)
 
 	p, h := makePeerAndHandler()
-	h.callback = func(*fsmMsg) {}
+	h.msgCallback = func(*fsmMsg) {}
 
 	// push mock connection
 	p.fsm.conn = m
@@ -261,7 +261,7 @@ func TestFSMHandlerEstablish_HoldTimerExpired_GR_Enabled(t *testing.T) {
 	m := NewMockConnection(t)
 
 	p, h := makePeerAndHandler()
-	h.callback = func(*fsmMsg) {}
+	h.msgCallback = func(*fsmMsg) {}
 
 	// push mock connection
 	p.fsm.conn = m

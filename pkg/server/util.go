@@ -21,6 +21,17 @@ import (
 	"github.com/osrg/gobgp/v4/pkg/packet/bgp"
 )
 
+func emptyInfiniteChannel(ch *channels.InfiniteChannel) {
+	for {
+		select {
+		case <-ch.Out():
+			// drain the channel
+		default:
+			return // channel is empty
+		}
+	}
+}
+
 func cleanInfiniteChannel(ch *channels.InfiniteChannel) {
 	ch.Close()
 	// drain all remaining items

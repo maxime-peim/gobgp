@@ -253,80 +253,7 @@ func (s *BgpServer) mgmtOperation(f func() error, checkActive bool) (err error) 
 }
 
 func (s *BgpServer) startFsmHandler(peer *peer) {
-	handler := func(e *fsmMsg) {
-		s.shared.mu.Lock()
-		defer s.shared.mu.Unlock()
-
-		fsm := e.fsm
-		if fsm.h.ctx.Err() != nil {
-			// canceled
-			addr := fsm.pConf.State.NeighborAddress
-			state := fsm.state
-
-			s.logger.Debug("freed fsm.h",
-				log.Fields{
-					"Topic": "Peer",
-					"Key":   addr,
-					"State": state,
-				})
-
-			if state == bgp.BGP_FSM_ACTIVE {
-				var conn net.Conn
-				select {
-				case conn = <-fsm.connCh:
-				default:
-					if fsm.conn != nil {
-						conn = fsm.conn
-						fsm.conn = nil
-					}
-				}
-				if conn != nil {
-					err := conn.Close()
-					if err != nil {
-						s.logger.Error("failed to close existing tcp connection",
-							log.Fields{
-								"Topic": "Peer",
-								"Key":   addr,
-								"State": state,
-							})
-					}
-				}
-			}
-			close(fsm.connCh)
-
-			if fsm.state == bgp.BGP_FSM_ESTABLISHED {
-				s.notifyWatcher(watchEventTypePeerState, &watchEventPeer{
-					PeerAS:      fsm.peerInfo.AS,
-					PeerAddress: fsm.peerInfo.Address,
-					PeerID:      fsm.peerInfo.ID,
-					State:       bgp.BGP_FSM_IDLE,
-					Timestamp:   time.Now(),
-					StateReason: &fsmStateReason{
-						Type: fsmDeConfigured,
-					},
-				})
-			}
-
-			cleanInfiniteChannel(fsm.outgoingCh)
-			if s.shutdownWG != nil && len(s.incomings) == 0 {
-				s.shutdownWG.Done()
-			}
-			return
-		}
-
-		peer, found := s.neighborMap[e.MsgSrc]
-		if !found {
-			s.logger.Warn("Can't find the neighbor",
-				log.Fields{
-					"Topic": "Peer",
-					"Key":   e.MsgSrc,
-				})
-			return
-		}
-		s.handleFSMMessage(peer, e)
-	}
-
-	peer.startFSMHandler(handler)
+	peer.startFSMHandler(s.fsmStateHandler(peer), s.handleFSMMessage)
 }
 
 func (s *BgpServer) passConnToPeer(conn net.Conn) {
@@ -1491,18 +1418,46 @@ func (s *BgpServer) propagateUpdateToNeighbors(rib *table.TableManager, source *
 	}
 }
 
-func (s *BgpServer) deleteDynamicNeighbor(peer *peer, oldState bgp.FSMState, e *fsmMsg) {
+func (s *BgpServer) stopNeighbor(peer *peer) {
 	peer.stopPeerRestarting()
-	peer.fsm.lock.RLock()
-	delete(s.neighborMap, peer.fsm.pConf.State.NeighborAddress)
-	peer.fsm.lock.RUnlock()
-	cleanInfiniteChannel(peer.fsm.outgoingCh)
-	s.broadcastPeerState(peer, oldState, e)
+	delete(s.neighborMap, peer.ID())
+	// we stop the FSM handler here
+	// the stateCallback will be called on last time
+	// at the end of the FSM handler loop.
+	// the stateCallback will broadcast the state change,
+	// and the handler loop will clean up the peer
+	peer.stopFSMHandler()
+	if s.shutdownWG != nil {
+		s.shutdownWG.Done()
+	}
 }
 
-func (s *BgpServer) handleFSMMessage(peer *peer, e *fsmMsg) {
-	switch e.MsgType {
-	case fsmMsgStateChange:
+func (s *BgpServer) fsmStateHandler(peer *peer) func(e *fsmMsg) {
+	return func(e *fsmMsg) {
+		if e == nil || e.MsgType != fsmMsgStateChange {
+			s.logger.Error("invalid message type for fsmStateHandler",
+				log.Fields{
+					"Topic": "Peer",
+					"Src":   e.MsgSrc,
+					"Type":  e.MsgType,
+				})
+			return
+		} else if e.MsgSrc != peer.ID() {
+			s.logger.Error("invalid message source for fsmStateHandler",
+				log.Fields{
+					"Topic":    "Peer",
+					"Src":      e.MsgSrc,
+					"Expected": peer.ID(),
+				})
+			return
+		}
+
+		// do not check if the peer is still in the neighborMap
+		// has we will call this function when the handler get cancelled
+		// and the peer is already removed from the map
+		s.shared.mu.Lock()
+		defer s.shared.mu.Unlock()
+
 		nextState := e.MsgData.(bgp.FSMState)
 		peer.fsm.lock.Lock()
 		oldState := bgp.FSMState(peer.fsm.pConf.State.SessionState.ToInt())
@@ -1514,6 +1469,8 @@ func (s *BgpServer) handleFSMMessage(peer *peer, e *fsmMsg) {
 		peer.fsm.lock.RLock()
 		nextStateIdle := peer.fsm.pConf.GracefulRestart.State.PeerRestarting && nextState == bgp.BGP_FSM_IDLE
 		peer.fsm.lock.RUnlock()
+
+		defer s.broadcastPeerState(peer, oldState, e)
 
 		// PeerDown
 		if oldState == bgp.BGP_FSM_ESTABLISHED {
@@ -1554,7 +1511,11 @@ func (s *BgpServer) handleFSMMessage(peer *peer, e *fsmMsg) {
 			peer.fsm.lock.Unlock()
 
 			if !graceful && peer.isDynamicNeighbor() {
-				s.deleteDynamicNeighbor(peer, oldState, e)
+				// the handler context will be cancelled
+				// and the stateCallback will not be called
+				// since we already are at the end of the handler loop.
+				// we will broadcast the state change here.
+				s.stopNeighbor(peer)
 				return
 			}
 		} else if nextStateIdle {
@@ -1651,14 +1612,17 @@ func (s *BgpServer) handleFSMMessage(peer *peer, e *fsmMsg) {
 				s.propagateUpdate(peer, peer.DropAll(peer.configuredRFlist()))
 
 				if peer.isDynamicNeighbor() {
-					s.deleteDynamicNeighbor(peer, oldState, e)
+					// the handler context will be cancelled
+					// and the stateCallback will not be called
+					// since we already are at the end of the handler loop.
+					// we will broadcast the state change here.
+					s.stopNeighbor(peer)
 					return
 				}
 			}
 		}
 
-		cleanInfiniteChannel(peer.fsm.outgoingCh)
-		peer.fsm.outgoingCh = channels.NewInfiniteChannel()
+		emptyInfiniteChannel(peer.fsm.outgoingCh)
 		if nextState == bgp.BGP_FSM_ESTABLISHED {
 			// update for export policy
 			laddr, _ := peer.fsm.LocalHostPort()
@@ -1790,8 +1754,29 @@ func (s *BgpServer) handleFSMMessage(peer *peer, e *fsmMsg) {
 			peer.fsm.pConf.Timers.State = oc.TimersState{}
 			peer.fsm.lock.Unlock()
 		}
-		s.startFsmHandler(peer)
-		s.broadcastPeerState(peer, oldState, e)
+		// schedule a new FSM handler loop.
+		// don't create a new handler as we might
+		// have cancelled the previous one and
+		// creating a new one will create a new context.
+		peer.restartFSMHandler()
+	}
+}
+
+func (s *BgpServer) handleFSMMessage(e *fsmMsg) {
+	s.shared.mu.Lock()
+	defer s.shared.mu.Unlock()
+
+	peer, found := s.neighborMap[e.MsgSrc]
+	if !found {
+		s.logger.Warn("Can't find the neighbor",
+			log.Fields{
+				"Topic": "Peer",
+				"Key":   e.MsgSrc,
+			})
+		return
+	}
+
+	switch e.MsgType {
 	case fsmMsgRouteRefresh:
 		peer.fsm.lock.RLock()
 		notEstablished := peer.fsm.state != bgp.BGP_FSM_ESTABLISHED
@@ -3424,12 +3409,9 @@ func (s *BgpServer) deleteNeighbor(c *oc.Neighbor, code, subcode uint8) error {
 			"Key":   addr,
 		})
 
-	n.stopPeerRestarting()
 	n.fsm.notification <- bgp.NewBGPNotificationMessage(code, subcode, nil)
-	n.fsm.h.ctxCancel()
-
-	delete(s.neighborMap, addr)
 	s.propagateUpdate(n, n.DropAll(n.configuredRFlist()))
+	s.stopNeighbor(n)
 	return nil
 }
 

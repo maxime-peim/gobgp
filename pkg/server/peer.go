@@ -650,11 +650,30 @@ func (peer *peer) handleUpdate(e *fsmMsg) ([]*table.Path, []bgp.Family, *bgp.BGP
 	return nil, nil, nil
 }
 
-func (peer *peer) startFSMHandler(callback func(*fsmMsg)) {
-	handler := newFSMHandler(peer.fsm, peer.fsm.outgoingCh, callback)
+func (peer *peer) startFSMHandler(stateCallack, msgCallback func(*fsmMsg)) {
+	handler := newFSMHandler(peer.fsm, peer.fsm.outgoingCh, stateCallack, msgCallback)
 	peer.fsm.lock.Lock()
 	peer.fsm.h = handler
 	peer.fsm.lock.Unlock()
+}
+
+func (peer *peer) restartFSMHandler() {
+	peer.fsm.lock.Lock()
+	defer peer.fsm.lock.Unlock()
+	if peer.fsm.h == nil || peer.fsm.h.ctx.Err() != nil {
+		return
+	}
+	// restart the loop
+	go peer.fsm.h.loop(peer.fsm.h.ctx)
+}
+
+func (peer *peer) stopFSMHandler() {
+	peer.fsm.lock.Lock()
+	defer peer.fsm.lock.Unlock()
+	if peer.fsm.h == nil {
+		return
+	}
+	peer.fsm.h.ctxCancel()
 }
 
 func (peer *peer) StaleAll(rfList []bgp.Family) []*table.Path {
