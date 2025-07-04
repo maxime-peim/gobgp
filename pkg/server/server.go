@@ -123,7 +123,6 @@ type BgpServer struct {
 	globalRib    *table.TableManager
 	rsRib        *table.TableManager
 	roaManager   *roaManager
-	shutdownWG   *sync.WaitGroup
 	watcherMap   map[watchEventType][]*watcher
 	zclient      *zebraClient
 	bmpManager   *bmpClientManager
@@ -132,6 +131,7 @@ type BgpServer struct {
 	uuidMap      map[string]uuid.UUID
 	logger       log.Logger
 	timingHook   FSMTimingHook
+	runningWg    sync.WaitGroup
 }
 
 func NewBgpServer(opt ...ServerOption) *BgpServer {
@@ -160,6 +160,7 @@ func NewBgpServer(opt ...ServerOption) *BgpServer {
 		roaTable:     roaTable,
 		logger:       logger,
 		timingHook:   opts.timingHook,
+		runningWg:    sync.WaitGroup{},
 	}
 	s.bmpManager = newBmpClientManager(s)
 	s.mrtManager = newMrtManager(s)
@@ -253,7 +254,7 @@ func (s *BgpServer) mgmtOperation(f func() error, checkActive bool) (err error) 
 }
 
 func (s *BgpServer) startFsmHandler(peer *peer) {
-	peer.startFSMHandler(s.fsmStateHandler(peer), s.handleFSMMessage)
+	peer.startFSMHandler(s.fsmStateHandler(peer), s.handleFSMMessage, &s.runningWg)
 }
 
 func (s *BgpServer) passConnToPeer(conn net.Conn) {
@@ -1427,9 +1428,6 @@ func (s *BgpServer) stopNeighbor(peer *peer) {
 	// the stateCallback will broadcast the state change,
 	// and the handler loop will clean up the peer
 	peer.stopFSMHandler()
-	if s.shutdownWG != nil {
-		s.shutdownWG.Done()
-	}
 }
 
 func (s *BgpServer) fsmStateHandler(peer *peer) func(e *fsmMsg) {
@@ -2053,16 +2051,7 @@ func (s *BgpServer) StopBgp(ctx context.Context, r *api.StopBgpRequest) error {
 		return fmt.Errorf("nil request")
 	}
 	err := s.mgmtOperation(func() error {
-		names := make([]string, 0, len(s.neighborMap))
-		for k := range s.neighborMap {
-			names = append(names, k)
-		}
-
-		if len(names) != 0 {
-			s.shutdownWG = new(sync.WaitGroup)
-			s.shutdownWG.Add(len(names))
-		}
-		for _, name := range names {
+		for name := range s.neighborMap {
 			if err := s.deleteNeighbor(&oc.Neighbor{Config: oc.NeighborConfig{
 				NeighborAddress: name,
 			}}, bgp.BGP_ERROR_CEASE, bgp.BGP_ERROR_SUB_PEER_DECONFIGURED); err != nil {
@@ -2078,11 +2067,7 @@ func (s *BgpServer) StopBgp(ctx context.Context, r *api.StopBgpRequest) error {
 	if err != nil {
 		return err
 	}
-
-	if s.shutdownWG != nil {
-		s.shutdownWG.Wait()
-		s.shutdownWG = nil
-	}
+	s.runningWg.Wait()
 	return nil
 }
 

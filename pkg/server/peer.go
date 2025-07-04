@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/osrg/gobgp/v4/internal/pkg/table"
@@ -650,8 +651,8 @@ func (peer *peer) handleUpdate(e *fsmMsg) ([]*table.Path, []bgp.Family, *bgp.BGP
 	return nil, nil, nil
 }
 
-func (peer *peer) startFSMHandler(stateCallack, msgCallback func(*fsmMsg)) {
-	handler := newFSMHandler(peer.fsm, peer.fsm.outgoingCh, stateCallack, msgCallback)
+func (peer *peer) startFSMHandler(stateCallack, msgCallback func(*fsmMsg), wg *sync.WaitGroup) {
+	handler := newFSMHandler(peer.fsm, peer.fsm.outgoingCh, stateCallack, msgCallback, wg)
 	peer.fsm.lock.Lock()
 	peer.fsm.h = handler
 	peer.fsm.lock.Unlock()

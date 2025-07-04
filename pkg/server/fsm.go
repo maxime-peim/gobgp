@@ -392,9 +392,10 @@ type fsmHandler struct {
 	ctxCancel        context.CancelFunc
 	stateCallback    func(*fsmMsg)
 	msgCallback      func(*fsmMsg)
+	wg               *sync.WaitGroup
 }
 
-func newFSMHandler(fsm *fsm, outgoing *channels.InfiniteChannel, stateCallback, msgCallback func(*fsmMsg)) *fsmHandler {
+func newFSMHandler(fsm *fsm, outgoing *channels.InfiniteChannel, stateCallback, msgCallback func(*fsmMsg), wg *sync.WaitGroup) *fsmHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &fsmHandler{
 		fsm:              fsm,
@@ -405,7 +406,9 @@ func newFSMHandler(fsm *fsm, outgoing *channels.InfiniteChannel, stateCallback, 
 		ctxCancel:        cancel,
 		stateCallback:    stateCallback,
 		msgCallback:      msgCallback,
+		wg:               wg,
 	}
+	wg.Add(1)
 	go h.loop(ctx)
 	return h
 }
@@ -2067,6 +2070,7 @@ func (h *fsmHandler) loop(ctx context.Context) error {
 			}
 		}
 		cleanInfiniteChannel(fsm.outgoingCh)
+		h.wg.Done()
 	}
 
 	return nil
