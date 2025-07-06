@@ -16,56 +16,18 @@
 package peering
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
 	"net"
-	"strconv"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/eapache/channels"
 	"github.com/osrg/gobgp/v4/internal/pkg/netutils"
 	"github.com/osrg/gobgp/v4/internal/pkg/table"
-	"github.com/osrg/gobgp/v4/pkg/bgputils"
 	"github.com/osrg/gobgp/v4/pkg/config/oc"
 	"github.com/osrg/gobgp/v4/pkg/log"
 	"github.com/osrg/gobgp/v4/pkg/packet/bgp"
 	"github.com/osrg/gobgp/v4/pkg/packet/bmp"
-	"github.com/osrg/gobgp/v4/pkg/utils"
 )
-
-const (
-	MinConnectRetryInterval = 1
-)
-
-type FSMStateReasonType uint8
-
-const (
-	FSMDying FSMStateReasonType = iota
-	FSMAdminDown
-	FSMReadFailed
-	FSMWriteFailed
-	FSMNotificationSent
-	FSMNotificationRecv
-	FSMHoldTimerExpired
-	FSMIdleTimerExpired
-	FSMRestartTimerExpired
-	FSMGracefulRestart
-	FSMInvalidMsg
-	FSMNewConnection
-	FSMOpenMsgReceived
-	FSMOpenMsgNegotiated
-	FSMHardReset
-	FSMDeconfigured
-)
-
-type FSMStateReason struct {
-	Type            FSMStateReasonType
-	BGPNotification *bgp.BGPMessage
-	Data            []byte
-}
 
 func NewfsmStateReason(typ FSMStateReasonType, notif *bgp.BGPMessage, data []byte) *FSMStateReason {
 	return &FSMStateReason{
@@ -75,7 +37,7 @@ func NewfsmStateReason(typ FSMStateReasonType, notif *bgp.BGPMessage, data []byt
 	}
 }
 
-func (r FSMStateReason) String() string {
+func (r *FSMStateReason) String() string {
 	switch r.Type {
 	case FSMDying:
 		return "dying"
@@ -114,45 +76,6 @@ func (r FSMStateReason) String() string {
 	}
 }
 
-type FSMMsgType int
-
-const (
-	_ FSMMsgType = iota
-	FSMMsgStateChange
-	FSMMsgBGPMessage
-	FSMMsgRouteRefresh
-)
-
-type FSMMsg struct {
-	MsgType     FSMMsgType
-	FSM         *fsm
-	MsgSrc      string
-	MsgData     any
-	StateReason *FSMStateReason
-	PathList    []*table.Path
-	Timestamp   time.Time
-	Payload     []byte
-}
-
-type FSMOutgoingMsg struct {
-	Paths        []*table.Path
-	Notification *bgp.BGPMessage
-	StayIdle     bool
-}
-
-const (
-	HoldTimeOpenSent = 240
-	HoldTimeIdle     = 5
-)
-
-type AdminState int
-
-const (
-	AdminStateUp AdminState = iota
-	AdminStateDown
-	AdminStatePfxCt
-)
-
 func (s AdminState) String() string {
 	switch s {
 	case AdminStateUp:
@@ -164,37 +87,6 @@ func (s AdminState) String() string {
 	default:
 		return "Unknown"
 	}
-}
-
-type AdminStateOperation struct {
-	State         AdminState
-	Communication []byte
-}
-
-type fsm struct {
-	Lock                 sync.RWMutex
-	GlobalConf           *oc.Global
-	PeerConf             *oc.Neighbor
-	State                bgp.FSMState
-	OutgoingCh           *channels.InfiniteChannel
-	Reason               *FSMStateReason
-	Conn                 net.Conn
-	ConnCh               chan net.Conn
-	IdleHoldTime         float64
-	OpenSentHoldTime     float64
-	AdminState           AdminState
-	AdminStateCh         chan AdminStateOperation
-	Handler              *FSMHandler
-	RFMap                map[bgp.Family]bgp.BGPAddPathMode
-	CapMap               map[bgp.BGPCapabilityCode][]bgp.ParameterCapabilityInterface
-	RecvOpen             *bgp.BGPMessage
-	PeerInfo             *table.PeerInfo
-	GracefulRestartTimer *time.Timer
-	TwoByteAsTrans       bool
-	MarshallingOptions   *bgp.MarshallingOption
-	Notification         chan *bgp.BGPMessage
-	LongLivedRunning     bool
-	Logger               log.Logger
 }
 
 func (fsm *fsm) bgpMessageStateUpdate(MessageType uint8, isIn bool) {
