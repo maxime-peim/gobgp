@@ -16,13 +16,16 @@
 package peering
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/eapache/channels"
 	"github.com/osrg/gobgp/v4/internal/pkg/netutils"
 	"github.com/osrg/gobgp/v4/internal/pkg/table"
+	"github.com/osrg/gobgp/v4/pkg/bgputils"
 	"github.com/osrg/gobgp/v4/pkg/config/oc"
 	"github.com/osrg/gobgp/v4/pkg/log"
 	"github.com/osrg/gobgp/v4/pkg/packet/bgp"
@@ -154,7 +157,10 @@ func (fsm *fsm) bmpStatsUpdate(statType uint16, increment int) {
 	}
 }
 
-func newFSM(gConf *oc.Global, pConf *oc.Neighbor, logger log.Logger) *fsm {
+func newFSM(gConf *oc.Global, pConf *oc.Neighbor, callback FSMCallback, logger log.Logger) *fsm {
+	if callback == nil {
+		callback = func(*FSMMsg) {}
+	}
 	adminState := AdminStateUp
 	if pConf.Config.AdminDown {
 		adminState = AdminStateDown
@@ -175,6 +181,9 @@ func newFSM(gConf *oc.Global, pConf *oc.Neighbor, logger log.Logger) *fsm {
 		PeerInfo:             table.NewPeerInfo(gConf, pConf),
 		GracefulRestartTimer: time.NewTimer(time.Hour),
 		Notification:         make(chan *bgp.BGPMessage, 1),
+		StateReasonCh:        make(chan *FSMStateReason, 1),
+		HoldTimerResetCh:     make(chan bool, 1),
+		Callback:             callback,
 		Logger:               logger,
 	}
 	fsm.GracefulRestartTimer.Stop()
@@ -231,18 +240,18 @@ func (fsm *fsm) LocalHostPort() (string, uint16) {
 
 func (fsm *fsm) sendNotificationFromErrorMsg(e *bgp.MessageError) (*bgp.BGPMessage, error) {
 	fsm.Lock.RLock()
-	established := fsm.Handler != nil && fsm.Handler.Conn != nil
+	established := fsm.Conn != nil
 	fsm.Lock.RUnlock()
 
 	if established {
 		m := bgp.NewBGPNotificationMessage(e.TypeCode, e.SubTypeCode, e.Data)
 		b, _ := m.Serialize()
-		_, err := fsm.Handler.Conn.Write(b)
+		_, err := fsm.Conn.Write(b)
 		if err == nil {
 			fsm.bgpMessageStateUpdate(m.Header.Type, false)
-			fsm.Handler.SentNotification = m
+			fsm.SentNotification = m
 		}
-		fsm.Handler.Conn.Close()
+		fsm.Conn.Close()
 		fsm.Logger.Warn("sent notification",
 			log.Fields{
 				"Topic": "Peer",
